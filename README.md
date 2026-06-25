@@ -2,7 +2,7 @@
 
 ![](fig_pipeline.png)
 
-This repository contains the code used for the main BGF selector experiments in magnetic nanorobot tumor targeting. It includes the selector, the PhysiCell project files, and the scripts needed to regenerate instances, train the selector, and evaluate it.
+This repository contains the code and released data for the main BGF selector experiments in magnetic nanorobot tumor targeting. It includes the selector, the PhysiCell project files, the train/validation/test splits, and the scripts needed to regenerate the data, train the selector, and evaluate it.
 
 ## Project Structure
 
@@ -14,10 +14,18 @@ This repository contains the code used for the main BGF selector experiments in 
 ├── pyproject.toml
 ├── fig_pipeline.pdf
 ├── fig_pipeline.png
+├── data/
+│   ├── README.md
+│   ├── instances/
+│   │   ├── train/fields.npz             # 1500 PhysiCell training instances
+│   │   ├── val/fields.npz               # 250 PhysiCell validation instances
+│   │   └── test/fields.npz              # 250 PhysiCell test instances
+│   └── shards_adv/
+│       └── adv_*.npz                    # selector training shards
 ├── miso/
 │   ├── __init__.py
 │   ├── physicell_gen.py                 # randomized PhysiCell instance generator
-│   ├── physicell_oracle.py              # noisy point-query wrapper around cached fields
+│   ├── physicell_oracle.py              # noisy point-query interface over simulated fields
 │   └── selector_swarm.py                # swarm dynamics, BGF selector, and evaluation environment
 ├── physicell/
 │   └── miso_biomarker_fields/           # custom PhysiCell user project
@@ -38,7 +46,7 @@ This repository contains the code used for the main BGF selector experiments in 
     │   ├── setup_physicell_project.sh   # fetch/build PhysiCell with our user project
     │   ├── run_instance.sh              # run one generated instance
     │   ├── run_manifest.sh              # run a manifest with local parallel workers
-    │   └── cache_fields.py              # pack completed simulations into cache.npz
+    │   └── collect_fields.py            # collect completed simulations into split-level .npz files
     ├── training/
     │   ├── gen_advantage_data.py
     │   ├── gen_advantage_shards.sh
@@ -87,19 +95,43 @@ export PHYSICELL_CPP=/path/to/c++
 
 ## Smoke Test
 
-Run this once before starting the full experiment. It checks that Python, PhysiCell, the generated XML, simulation output, and cache loading all agree.
+Run this once before starting the full experiment. It checks that Python, PhysiCell, the generated XML, simulation output, and field loading all agree.
 
 ```bash
 SMOKE_ROOT="$PWD/data/smoke"
 python -m miso.physicell_gen --split test --n 1 --root "$SMOKE_ROOT" --max_time 60
 bash scripts/physicell/run_instance.sh "$SMOKE_ROOT/test/manifest.txt" 0
-python scripts/physicell/cache_fields.py --root "$SMOKE_ROOT" --split test
+python scripts/physicell/collect_fields.py --root "$SMOKE_ROOT" --split test
 python scripts/validation/validate_fields.py "$SMOKE_ROOT/test"
 ```
 
 ## Main Experiment
 
-Generate the PhysiCell instances:
+The released data are already in `data/instances`, and the selector training shards are already in
+`data/shards_adv`. You can therefore train and evaluate directly:
+
+```bash
+DATA_ROOT="$PWD/data/instances"
+
+mkdir -p runs
+for seed in 0 1 2 3 4; do
+  python scripts/training/train_selector.py \
+    --shards "data/shards_adv/adv_*.npz" \
+    --mode rel --epochs 40 --seed "$seed" \
+    --out "runs/selector_rel_s${seed}.pth"
+
+  python scripts/evaluation/eval_selector.py \
+    --root "$DATA_ROOT" --split test \
+    --selector "runs/selector_rel_s${seed}.pth" --mode rel \
+    --start 0 --end 250 --trials 8 --radius 60 \
+    --policies random,fusion,learned \
+    --out "runs/main_s${seed}.json"
+done
+
+python scripts/evaluation/summarize_eval.py "runs/main_s*.json"
+```
+
+To regenerate the PhysiCell instances from scratch:
 
 ```bash
 DATA_ROOT="$PWD/data/instances"
@@ -116,21 +148,21 @@ JOBS=8 bash scripts/physicell/run_manifest.sh "$DATA_ROOT/val/manifest.txt" 250
 JOBS=8 bash scripts/physicell/run_manifest.sh "$DATA_ROOT/test/manifest.txt" 250
 ```
 
-Cache the completed fields:
+Build the split-level field files:
 
 ```bash
-python scripts/physicell/cache_fields.py --root "$DATA_ROOT" --split train
-python scripts/physicell/cache_fields.py --root "$DATA_ROOT" --split val
-python scripts/physicell/cache_fields.py --root "$DATA_ROOT" --split test
+python scripts/physicell/collect_fields.py --root "$DATA_ROOT" --split train
+python scripts/physicell/collect_fields.py --root "$DATA_ROOT" --split val
+python scripts/physicell/collect_fields.py --root "$DATA_ROOT" --split test
 ```
 
-Build the selector training shards:
+To regenerate the selector training shards:
 
 ```bash
 JOBS=8 bash scripts/training/gen_advantage_shards.sh "$DATA_ROOT" train shards 1500 25
 ```
 
-Train and evaluate five seeds:
+Then train and evaluate five seeds:
 
 ```bash
 mkdir -p runs
@@ -153,13 +185,13 @@ python scripts/evaluation/summarize_eval.py "runs/main_s*.json"
 
 ## Free-Growth Check
 
-This is optional. It uses the same pipeline, but the tumors start from a small seed and grow before the fields are cached.
+This is optional. It uses the same pipeline, but the tumors start from a small seed and grow before the fields are packed into the released data format.
 
 ```bash
 GROW_ROOT="$PWD/data/instances_growth"
 python -m miso.physicell_gen --split test --n 40 --root "$GROW_ROOT" --growth --max_time 1440
 JOBS=8 bash scripts/physicell/run_manifest.sh "$GROW_ROOT/test/manifest.txt" 40
-python scripts/physicell/cache_fields.py --root "$GROW_ROOT" --split test
+python scripts/physicell/collect_fields.py --root "$GROW_ROOT" --split test
 python scripts/validation/validate_growth_fields.py "$GROW_ROOT/test"
 
 python scripts/evaluation/eval_selector.py \

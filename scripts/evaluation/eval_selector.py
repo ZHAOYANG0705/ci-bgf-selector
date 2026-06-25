@@ -3,7 +3,7 @@ import os, sys, json, argparse, numpy as np, torch
 from pathlib import Path
 REPO_ROOT = next(p for p in Path(__file__).resolve().parents if (p / "miso").is_dir())
 sys.path.insert(0, str(REPO_ROOT))
-from miso.selector_swarm import BGFEnv, run_trial, load_cache, BGFSelectorNet, KSRC
+from miso.selector_swarm import BGFEnv, run_trial, load_fields, BGFSelectorNet, KSRC
 
 def main():
     ap = argparse.ArgumentParser()
@@ -19,7 +19,7 @@ def main():
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
-    cache = load_cache(args.root, args.split); xstar = cache["x_star"].numpy()
+    data = load_fields(args.root, args.split); xstar = data["x_star"].numpy()
     R = None if args.radius < 0 else args.radius
     pols = args.policies.split(",")
     sel = None
@@ -27,12 +27,12 @@ def main():
         sel = BGFSelectorNet(mode=args.mode); sel.load_state_dict(torch.load(args.selector, map_location="cpu")); sel.eval()
     # per-instance success counts and step sums
     cnt = {p: 0 for p in pols}; steps = {p: 0 for p in pols}; per_inst = {p: [] for p in pols}; tot = 0
-    Ninst = cache["fields"].shape[0]
+    Ninst = data["fields"].shape[0]
     for ii in range(args.start, min(args.end, Ninst)):
         if args.region == "left" and xstar[ii, 0] >= -40: continue
         if args.region == "right" and xstar[ii, 0] <= 40: continue
-        env = BGFEnv(cache["fields"][ii], cache["masks"][ii], cache["xs"], cache["ys"], noise=args.noise,
-                     x_star=cache["x_star"][ii], success_radius=R)
+        env = BGFEnv(data["fields"][ii], data["masks"][ii], data["xs"], data["ys"], noise=args.noise,
+                     x_star=data["x_star"][ii], success_radius=R)
         inst_succ = {p: 0 for p in pols}
         for t in range(args.trials):
             tot += 1

@@ -10,9 +10,9 @@ SHARD_SIZE="${5:-25}"
 JOBS="${JOBS:-1}"
 PYTHON="${PYTHON:-python}"
 
-if [ ! -f "$DATA_ROOT/$SPLIT/cache.npz" ]; then
-  echo "Cache not found: $DATA_ROOT/$SPLIT/cache.npz" >&2
-  echo "Run scripts/physicell/cache_fields.py before generating advantage-label shards." >&2
+if [ ! -f "$DATA_ROOT/$SPLIT/fields.npz" ]; then
+  echo "Field file not found: $DATA_ROOT/$SPLIT/fields.npz" >&2
+  echo "Run scripts/physicell/collect_fields.py before generating advantage-label shards." >&2
   exit 2
 fi
 
@@ -31,4 +31,4 @@ seq 0 "$((NSHARDS - 1))" | xargs -P "$JOBS" -I {} bash -c '
     --start "$start" --end "$end" \
     --K 6 --n_base 2 --every 12 --radius -1 \
     --out "$OUT_DIR/adv_$(printf "%03d" "$t").npz"
-' _
+' _ {}

@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# Generated simulation / learning artifacts
+external/
+logs/
+runs/
+shards/
+checkpoints/
+*.npz
+!data/instances/**/fields.npz
+!data/shards_adv/adv_*.npz
+*.pth
+*.pt
+*.mat
+*.log

@@ -263,10 +263,10 @@ def run_trial(env, selector, policy, N=20, G=150, c=1.5, w_ini=0.9, w_end=0.4, v
 
 
 # ----------------------------- detection-rate evaluation -----------------------------
-def eval_detection(cache, selectors, policies, n_inst=120, trials=8, noise=0.5, seed0=0):
+def eval_detection(data, selectors, policies, n_inst=120, trials=8, noise=0.5, seed0=0):
     res = {p: 0 for p in policies}; tot = 0
-    for ii in range(min(n_inst, cache["fields"].shape[0])):
-        env = BGFEnv(cache["fields"][ii], cache["masks"][ii], cache["xs"], cache["ys"], noise=noise)
+    for ii in range(min(n_inst, data["fields"].shape[0])):
+        env = BGFEnv(data["fields"][ii], data["masks"][ii], data["xs"], data["ys"], noise=noise)
         for t in range(trials):
             tot += 1
             for p in policies:
@@ -280,8 +280,8 @@ def eval_one(env, sel, p, seed):
     return run_trial(env, sel, p, seed=seed)
 
 
-def load_cache(root, split):
-    d = np.load(os.path.join(root, split, "cache.npz"))
+def load_fields(root, split):
+    d = np.load(os.path.join(root, split, "fields.npz"))
     return dict(fields=torch.tensor(d["fields"], dtype=torch.float32),
                 masks=torch.tensor(d["masks"], dtype=torch.float32),
                 x_star=torch.tensor(d["x_star"], dtype=torch.float32),
@@ -293,10 +293,10 @@ if __name__ == "__main__":
     ap.add_argument("--root", default=os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "instances"))
     ap.add_argument("--n_inst", type=int, default=60); ap.add_argument("--trials", type=int, default=6)
     args = ap.parse_args()
-    cache = load_cache(args.root, "test")
+    data = load_fields(args.root, "test")
     # Stage-1 sanity: untrained selectors vs non-learned policies (baseline detection rates)
     sels = {"rel": BGFSelectorNet(mode="rel"), "abs": BGFSelectorNet(mode="abs")}
     pol = ["random", "fusion", "rel", "abs"]
-    r = eval_detection(cache, sels, pol, n_inst=args.n_inst, trials=args.trials)
+    r = eval_detection(data, sels, pol, n_inst=args.n_inst, trials=args.trials)
     print("STAGE-1 detection rate (untrained selectors):")
     for p in pol: print(f"  {p:<8} {r[p]:.3f}")

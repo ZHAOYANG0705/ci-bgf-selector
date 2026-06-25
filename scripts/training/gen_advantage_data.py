@@ -6,7 +6,7 @@ import os, sys, argparse, numpy as np, torch
 from pathlib import Path
 REPO_ROOT = next(p for p in Path(__file__).resolve().parents if (p / "miso").is_dir())
 sys.path.insert(0, str(REPO_ROOT))
-from miso.selector_swarm import BGFEnv, load_cache, wp_candidates, _build_sample, KSRC
+from miso.selector_swarm import BGFEnv, load_fields, wp_candidates, _build_sample, KSRC
 
 W_INI, W_END, C, N = 0.9, 0.4, 1.5, 20
 
@@ -36,14 +36,14 @@ def main():
     ap.add_argument("--radius", type=float, default=-1.0); ap.add_argument("--M", type=int, default=256)
     ap.add_argument("--noise", type=float, default=0.5); ap.add_argument("--out", required=True)
     args = ap.parse_args()
-    cache = load_cache(args.root, args.split); xstar = cache["x_star"]
+    data = load_fields(args.root, args.split); xstar = data["x_star"]
     R = None if args.radius < 0 else args.radius
     B1, B2, MK, Y = [], [], [], []
-    for ii in range(args.start, min(args.end, cache["fields"].shape[0])):
+    for ii in range(args.start, min(args.end, data["fields"].shape[0])):
         if args.region == "left" and xstar[ii, 0] >= -40: continue
         if args.region == "right" and xstar[ii, 0] <= 40: continue
-        env = BGFEnv(cache["fields"][ii], cache["masks"][ii], cache["xs"], cache["ys"],
-                     noise=args.noise, x_star=cache["x_star"][ii], success_radius=R)
+        env = BGFEnv(data["fields"][ii], data["masks"][ii], data["xs"], data["ys"],
+                     noise=args.noise, x_star=data["x_star"][ii], success_radius=R)
         span = env.hi - env.lo; vmax = span * 0.10
         for b in range(args.n_base):
             g = torch.Generator().manual_seed(1000 * ii + b)
